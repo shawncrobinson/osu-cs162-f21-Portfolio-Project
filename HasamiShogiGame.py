@@ -51,6 +51,10 @@
 #
 #
 
+class InvalidAlgebraicNotation(Exception):
+    pass
+
+
 class Board:
     """The Board class is solely used as a container for board states, used in the HasamiShogiGame class.
     This class will contain the following data members:
@@ -59,25 +63,57 @@ class Board:
 
     def __init__(self):
         """The constructor for the Board class. Takes no parameters.
-        Creates the outer list, fills it with the inner lists, and fills those with "BLACK", "None" x7, "R" """
+        Creates the outer list, fills it with the inner lists representing each row,
+        and fills the inner lists with the pieces or empty spaces
+        Elements are accessed via self._board[Y][X]. [Y][X] made it easier to implement the board's print method"""
+        self._board = [["RED"] * 9,
+                       ["NONE"] * 9,
+                       ["NONE"] * 9,
+                       ["NONE"] * 9,
+                       ["NONE"] * 9,
+                       ["NONE"] * 9,
+                       ["NONE"] * 9,
+                       ["NONE"] * 9,
+                       ["BLACK"] * 9]
 
-    def _alg_to_indices(self, alg: str):
-        """Private method used to convert an algebraic notation space to board[x[y]] notation space.
-        Returns (x, y) as a tuple"""
-        pass
-
-    def get_space(self, space: str):
-        """Method used to get the contents of a space referenced by algebraic notation.
+    def get_space(self, xy):
+        """Method used to get the contents of a space (referenced by (column#, row#)).
         Returns "BLACK", "RED", or "NONE" """
-        pass
+        if xy[0] > 8 or xy[0] < 0 or xy[1] > 8 or xy[1] < 0:
+            return "NONE"
+        return self._board[xy[1]][xy[0]]
 
-    def set_space(self, space: str, val):
+    def set_space(self, xy, val):
         """Method used to overwrite the contents of a space referenced by algebraic notation."""
-        pass
+        self._board[xy[1]][xy[0]] = val
 
     def print(self):
         """Method used to display the board in a human readable format."""
 
+        # Create an iterator for row labels
+        row_labels = iter("abcdefghi")
+
+        # Draw the top row of column labels
+        print("  1 2 3 4 5 6 7 8 9")
+
+        for rows in self._board:
+            # Print a single row
+            print(next(row_labels), end=" ")  # Print row Label
+            for spaces in rows:  # Spaces
+                if spaces == "BLACK":
+                    print("B", end=" ")
+                elif spaces == "RED":
+                    print("R", end=" ")
+                else:
+                    print(".", end=" ")
+            print()  # End of line, since end=" " overwrites default \n with " "
+        print()
+
+    def is_corner(self, xy):
+        if ((xy[0] == 0 or xy[0] == 8) and
+                (xy[1] == 0 or xy[1] == 8)):
+            return True
+        return False
 
 
 class HasamiShogiGame:
@@ -93,34 +129,221 @@ class HasamiShogiGame:
     def __init__(self):
         """The constructor for the HasamiShogiGame class. Takes no parameters.
         Initializes all private data members, including a board object."""
-        self._active_player = "BLACK"
+        self._active_player = "BLACK"  # This player gets the first turn
         self._board = Board()
-        pass
+        self._game_state = "UNFINISHED"
+        self._captured_by_black = 0
+        self._captured_by_red = 0
+
+    def alg_to_indices(self, alg: str):
+        """Method used to convert an algebraic notation space to a tuple (column_number, row_number).
+        Raises an InvalidAlgebraicNotation exception if the input string is not a valid board position.
+        Returns (x, y) as a tuple."""
+        if len(alg) != 2:
+            raise InvalidAlgebraicNotation
+
+        row_num = "abcdefghi".find(alg[0].lower())
+        if row_num == -1:
+            raise InvalidAlgebraicNotation
+
+        try:
+            column_num = int(alg[1]) - 1
+        except ValueError:
+            raise InvalidAlgebraicNotation
+
+        return column_num, row_num
 
     def get_game_state(self):
         """Method that returns the game state data member.
         Returns "UNFINISHED", "RED_WON", or "BLACK_WON" """
-        pass
+        return self._game_state
 
     def get_active_player(self):
         """Method that returns the active player (which player's turn) data member.
         Returns "RED" or "BLACK" """
-        pass
+        return self._active_player
 
     def get_num_captured_pieces(self, player: str):
-        """Method that returns 9 minus the remaining pieces data member for the specified player."""
-        pass
+        """Method that returns the number of pieces captured pieces of a specified color"""
+        if player == "BLACK":
+            return self._captured_by_red
+        elif player == "RED":
+            return self._captured_by_black
+        else:
+            return -1
 
     def make_move(self, origin: str, destination: str):
         """Method that handles every aspect of making a move.
-        Checks if the game is still ongoing
-        Checks if moving the active player's piece
+        Checks if the game is still ongoing - Check
+        Checks if moving the active player's piece - Check
         Checks validity of move
         Moves the piece:
             Handles capturing pieces
             Ends the game if enough pieces captured"""
-        pass
+
+        # Lowercase the origin+destination strings to avoid issues when comparing them later
+        origin = origin.lower()
+        destination = destination.lower()
+
+        if self.get_game_state() != "UNFINISHED":
+            print("Unable to make move -- Game has concluded")
+            return False
+
+        try:
+            origin_xy = self.alg_to_indices(origin)
+        except InvalidAlgebraicNotation:
+            print("Unable to make move -- Origin is not in valid algebraic notation format")
+            return False
+
+        try:
+            destination_xy = self.alg_to_indices(destination)
+        except InvalidAlgebraicNotation:
+            print("Unable to make move -- Destination is not in valid algebraic notation format")
+            return False
+
+        if self.get_square_occupant(origin) != self.get_active_player():
+            print("Unable to make move -- Piece at the origin square is not owned by the active player")
+            return False
+
+        # Check if origin and destination are the same
+        if origin == destination:
+            print("Unable to make move -- Origin and destination are the same squares")
+            return False
+
+        # Check if origin and destination are within the same row or column, since the pieces moves by rook rules
+        if origin_xy[0] - destination_xy[0] != 0 and origin_xy[1] - destination_xy[1] != 0:
+            print("Unable to make move -- Origin and destination are not in a line (Pieces move like rooks)")
+            return False
+
+        # Determine direction to iterate down while checking for blocking pieces
+        if origin_xy[0] - destination_xy[0] != 0:  # If moving along the X axis
+            if origin_xy[0] > destination_xy[0]:
+                offset = (-1, 0)  # "LEFT"
+            else:
+                offset = (1, 0)  # "RIGHT"
+        else:  # If moving along the Y axis
+            if origin_xy[1] < destination_xy[1]:
+                offset = (0, 1)  # "DOWN"
+            else:
+                offset = (0, -1)  # "UP"
+
+        # Iterate along spaces in a line until either the first blocking piece or destination square is reached
+        current_square_xy = (origin_xy[0] + offset[0], origin_xy[1] + offset[1])
+        while (self._board.get_space(current_square_xy) != "NONE" and
+               current_square_xy != destination_xy):
+            current_square_xy = (current_square_xy[0] + offset[0], current_square_xy[1] + offset[1])
+        else:
+            if self._board.get_space(current_square_xy) != "NONE":
+                print("Unable to make move -- Movement path is blocked by another piece")
+                return False
+
+        # Move the piece
+        self._board.set_space(origin_xy, "NONE")
+        self._board.set_space(destination_xy, self.get_active_player())
+
+        # Check for and process captures.
+        # Even though only 3 directions could have a capture, all can be checked without causing issues.
+        for directions in ["LEFT", "RIGHT", "DOWN", "UP"]:
+            self._capture(self._check_sandwiched(destination_xy, directions))
+
+        # Check if the game is over
+        if self._captured_by_red == 9 or self._captured_by_black == 9:
+            self._game_state = self.get_active_player() + "_WON"
+            print(self.get_game_state())
+            return True
+
+        # End the current active player's turn
+        if self.get_active_player() == "BLACK":
+            self._active_player = "RED"
+        else:
+            self._active_player = "BLACK"
+
+        # Turn successfully processed
+        return True
 
     def get_square_occupant(self, square: str):
         """Method that calls the board's get_space method with the provided alg notation string and returns it."""
-        pass
+        return self._board.get_space(self.alg_to_indices(square))
+
+    def _capture(self, xys):
+        for squares in xys:
+            self._board.set_space(squares, "NONE")
+            if self.get_active_player() == "BLACK":
+                self._captured_by_black += 1
+            elif self.get_active_player() == "RED":
+                self._captured_by_red += 1
+
+    def _check_sandwiched(self, origin, direction):
+        """
+        Checks if any pieces are sandwiched. Returns any pieces to be captured
+        :param origin:
+        :param direction: Direction that should be checked in, either "UP", "DOWN", "LEFT", or "RIGHT"
+        :return: List of (x, y)s for pieces that should be captured)
+        """
+
+        if direction == "UP":
+            offset = (0, -1)
+        elif direction == "DOWN":
+            offset = (0, 1)
+        elif direction == "LEFT":
+            offset = (-1, 0)
+        elif direction == "RIGHT":
+            offset = (1, 0)
+        else:
+            return []
+
+        capturing = []
+        current_square_xy = (origin[0] + offset[0], origin[1] + offset[1])
+
+        if self._board.is_corner(current_square_xy) is True:  # Check for corner capturing if corner
+            # Check all spaces around a corner piece.
+            # If it has 2 of the active player's pieces next to it, its surrounded
+            sandwichers = 0
+            directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+            for offsets in directions:
+                checking = (current_square_xy[0] + offsets[0], current_square_xy[1] + offsets[1])
+                if self._board.get_space(checking) == self.get_active_player():
+                    sandwichers += 1
+            if sandwichers == 2:
+                capturing.append(current_square_xy)
+        else:  # If not a corner, check for sandwiches in a line
+            while (self._board.get_space(current_square_xy) != "NONE" and
+                   self._board.get_space(current_square_xy) != self.get_active_player()):
+                capturing.append(current_square_xy)
+                current_square_xy = (current_square_xy[0] + offset[0], current_square_xy[1] + offset[1])
+            if self._board.get_space(current_square_xy) != self.get_active_player():
+                capturing = []
+
+        return capturing
+
+
+def main():
+    b = Board()
+    b.print()
+
+    game = HasamiShogiGame()
+    move_result = game.make_move('i6', 'b6')
+    game._board.print()
+    move_result = game.make_move('a9', 'b9')
+    game._board.print()
+    move_result = game.make_move('b6', 'b8')
+    game._board.print()
+    move_result = game.make_move('a7', 'b7')
+    game._board.print()
+    move_result = game.make_move('a7', 'b7')
+    game._board.print()
+    move_result = game.make_move('i8', 'b8')
+    game._board.print()
+    move_result = game.make_move('b7', 'b1')
+    game._board.print()
+    move_result = game.make_move('i2', 'i2')
+    game._board.print()
+
+    print(move_result)
+    print(game.get_active_player())
+    print(game.get_square_occupant('a4'))
+    print(game.get_game_state())
+
+
+if __name__ == "__main__":
+    main()
