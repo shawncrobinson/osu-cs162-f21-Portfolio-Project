@@ -261,13 +261,12 @@ class HasamiShogiGame:
 
         # Iterate along spaces in a line until either the first blocking piece or destination square is reached
         current_square_xy = (origin_xy[0] + offset[0], origin_xy[1] + offset[1])
-        while (self._board.get_space(current_square_xy) != "NONE" and
+        while (self._board.get_space(current_square_xy) == "NONE" and
                current_square_xy != destination_xy):
             current_square_xy = (current_square_xy[0] + offset[0], current_square_xy[1] + offset[1])
-        else:
-            if self._board.get_space(current_square_xy) != "NONE":
-                print("Unable to make move -- Movement path is blocked by another piece")
-                return False
+        if self._board.get_space(current_square_xy) != "NONE":
+            print("Unable to make move -- Movement path is blocked by another piece")
+            return False
 
         # Move the piece
         self._board.set_space(origin_xy, "NONE")
@@ -279,7 +278,7 @@ class HasamiShogiGame:
             self._capture(self._check_sandwiched(destination_xy, directions))
 
         # Check if the game is over
-        if self._captured_by_red == 9 or self._captured_by_black == 9:
+        if self._captured_by_red >= 9 or self._captured_by_black >= 9:
             self._game_state = self.get_active_player() + "_WON"
             print(self.get_game_state())
             return True
@@ -337,7 +336,7 @@ class HasamiShogiGame:
             return []
 
         capturing = []
-        current_square_xy = (origin[0] + offset[0], origin[1] + offset[1]) #
+        current_square_xy = (origin[0] + offset[0], origin[1] + offset[1])
 
         if self._board.is_corner(current_square_xy) is True:  # Check for corner capturing if corner
             # Check all spaces around a corner piece (Including spaces off the board, since those return "NONE")
